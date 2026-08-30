@@ -1,0 +1,12 @@
+{
+  "name": "toad-gone-wild-capture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lead capture API for Toad Gone Wild",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "dev": "node --env-file=.env --watch server.js"
+  },
+  "engines": { "node": ">=20.6" }
+}
