@@ -20,27 +20,27 @@
 'use strict';
 
 const http = require('node:http');
-const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 
-const PORT         = Number(process.env.PORT || 8787);
-const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const ORIGINS      = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim()).filter(Boolean);
-const RATE_MAX     = Number(process.env.RATE_LIMIT_MAX || 10);
-const RATE_WINDOW  = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
-const SERVER_DIR   = path.resolve(__dirname);
-const PUBLIC_DIR   = path.resolve(process.env.PUBLIC_DIR || path.join(__dirname, '..'));
-const INDEX_FILE   = process.env.INDEX_FILE || 'toad-gone-wild-crossing.html';
+// Validation, Supabase calls, rate limiting and CORS all live in lib/capture.js,
+// shared with api/scores.js and api/leaderboard.js on Vercel. One copy, so the
+// two runtimes cannot drift apart.
+const {
+  config, missingConfig, keyKind, validate, captureLead, fetchLeaderboard,
+  createLimiter, clientIp, hashIp, corsHeaders
+} = require('../lib/capture.js');
+
+const PORT       = Number(process.env.PORT || 8787);
+const SERVER_DIR = path.resolve(__dirname);
+const PUBLIC_DIR = path.resolve(process.env.PUBLIC_DIR || path.join(__dirname, '..'));
+const INDEX_FILE = process.env.INDEX_FILE || 'toad-gone-wild-crossing.html';
+
+const cfg = config();
 
 // Catch the half-filled .env before it turns into a confusing 502 at runtime.
-const unset = [
-  ['SUPABASE_URL', SUPABASE_URL, u => u && !u.includes('YOUR-PROJECT')],
-  ['SUPABASE_SERVICE_ROLE_KEY', SUPABASE_KEY, k => k && !k.startsWith('PASTE_') && !k.startsWith('eyJhbGciOi...')]
-].filter(([, v, ok]) => !ok(v)).map(([n]) => n);
-
+const unset = missingConfig(cfg);
 if (unset.length) {
   console.error(`\nMissing or unfilled in backend/.env: ${unset.join(', ')}`);
   console.error('Get both from your Supabase project: Settings -> API.');
@@ -48,67 +48,15 @@ if (unset.length) {
   process.exit(1);
 }
 
-// Supabase issues two keys and they are easy to mix up:
-//   sb_publishable_... / anon JWT  -> meant to ship in a browser, obeys RLS
-//   sb_secret_...      / service_role JWT -> server only, bypasses RLS
-// A publishable key still works here (capture_lead is granted to anon), so this
-// is a warning rather than a hard stop -- but nothing that needs admin access,
-// like reading the leads table back, will work until it is the secret key.
-function keyKind(k) {
-  if (k.startsWith('sb_secret_')) return 'secret';
-  if (k.startsWith('sb_publishable_')) return 'publishable';
-  if (k.startsWith('eyJ')) {
-    try {
-      const role = JSON.parse(Buffer.from(k.split('.')[1], 'base64url').toString()).role;
-      if (role === 'service_role') return 'secret';
-      if (role === 'anon') return 'publishable';
-    } catch { /* not a JWT we can read */ }
-  }
-  return 'unknown';
-}
-
-const KEY_KIND = keyKind(SUPABASE_KEY);
-if (KEY_KIND === 'publishable') {
+if (keyKind(cfg.key) === 'publishable') {
   console.warn('\nWARNING: SUPABASE_SERVICE_ROLE_KEY holds a PUBLISHABLE (anon) key.');
   console.warn('  Captures will still work, but this server has no admin access.');
   console.warn('  For the secret key: Supabase -> Settings -> API -> secret keys.\n');
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
-const CONTROL_RE = /[\u0000-\u001F\u007F]/;   // reject control chars smuggled into a name
-
-/* ---------------- rate limiting: fixed window, per IP ---------------- */
-const hits = new Map();
-setInterval(() => {
-  const cutoff = Date.now() - RATE_WINDOW;
-  for (const [k, v] of hits) if (v.start < cutoff) hits.delete(k);
-}, RATE_WINDOW).unref();
-
-function overLimit(ip) {
-  const now = Date.now();
-  const rec = hits.get(ip);
-  if (!rec || now - rec.start > RATE_WINDOW) { hits.set(ip, { start: now, n: 1 }); return false; }
-  rec.n += 1;
-  return rec.n > RATE_MAX;
-}
-
-const clientIp = req =>
-  (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
-  req.socket.remoteAddress || 'unknown';
+const overLimit = createLimiter({ max: cfg.rateMax, windowMs: cfg.rateWindow });
 
 /* ---------------- helpers ---------------- */
-function cors(req, res) {
-  const origin = req.headers.origin;
-  const allow = ORIGINS.includes('*') ? '*' : (ORIGINS.includes(origin) ? origin : '');
-  if (allow) {
-    res.setHeader('access-control-allow-origin', allow);
-    if (allow !== '*') res.setHeader('vary', 'Origin');
-  }
-  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
-  res.setHeader('access-control-allow-headers', 'content-type');
-  res.setHeader('access-control-max-age', '86400');
-}
-
 function json(res, status, body) {
   const buf = Buffer.from(JSON.stringify(body));
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length });
@@ -129,55 +77,6 @@ function readBody(req, limit = 8192) {
       catch { reject(new Error('Malformed JSON.')); }
     });
     req.on('error', reject);
-  });
-}
-
-/** Validate and normalise. Returns { row }, { error }, or { bot }. */
-function validate(input) {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    return { error: 'Malformed request.' };
-  }
-
-  // Honeypot: a real player never fills a field they cannot see.
-  if (typeof input.website === 'string' && input.website.trim() !== '') return { bot: true };
-
-  const name = String(input.name ?? '').trim().replace(/\s+/g, ' ');
-  if (name.length < 2 || name.length > 60)  return { error: 'Name must be 2-60 characters.' };
-  if (CONTROL_RE.test(name))                return { error: 'Name contains invalid characters.' };
-
-  const email = String(input.email ?? '').trim().toLowerCase();
-  if (email.length > 200 || !EMAIL_RE.test(email)) return { error: 'That email does not look valid.' };
-
-  // The score arrives from the browser, so it is a claim, not a fact.
-  // Clamp it to what the game can actually produce and move on -- this is
-  // a mailing list, not a tournament ladder. See README for the caveat.
-  const num = (v, lo, hi, dflt) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : dflt;
-  };
-
-  return {
-    row: {
-      p_name:        name,
-      p_email:       email,
-      p_score:       num(input.score, 0, 100000, 0),
-      p_level:       num(input.level, 1, 4, 4),
-      p_duration_ms: num(input.duration_ms, 0, 86400000, null) || null,
-      p_source:      'web'
-    }
-  };
-}
-
-function supabase(path, init = {}) {
-  return fetch(`${SUPABASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'content-type': 'application/json',
-      apikey: SUPABASE_KEY,
-      authorization: `Bearer ${SUPABASE_KEY}`,
-      ...(init.headers || {})
-    },
-    signal: AbortSignal.timeout(8000)
   });
 }
 
@@ -241,7 +140,7 @@ async function serveStatic(req, res, pathname) {
 
 /* ---------------- routes ---------------- */
 const server = http.createServer(async (req, res) => {
-  cors(req, res);
+  for (const [k, v] of Object.entries(corsHeaders(req.headers.origin, cfg.origins))) res.setHeader(k, v);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -250,9 +149,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/leaderboard') {
     try {
-      const r = await supabase('/rest/v1/leaderboard?select=name,score,level&order=score.desc&limit=25');
-      if (!r.ok) throw new Error(`supabase ${r.status}`);
-      return json(res, 200, { leaderboard: await r.json() });
+      return json(res, 200, { leaderboard: await fetchLeaderboard(cfg, 25) });
     } catch (err) {
       console.error('leaderboard:', err.message);
       return json(res, 502, { error: 'Leaderboard unavailable.' });
@@ -272,18 +169,12 @@ const server = http.createServer(async (req, res) => {
     if (bot)   return json(res, 201, { ok: true });   // look successful, store nothing
 
     try {
-      const r = await supabase('/rest/v1/rpc/capture_lead', { method: 'POST', body: JSON.stringify(row) });
-      if (r.status === 400) {
-        const body = await r.json().catch(() => ({}));
-        console.warn('rejected by db:', body.message);
+      const result = await captureLead(cfg, row);
+      if (result.badInput) {
+        console.warn('rejected by db:', result.detail);
         return json(res, 400, { error: 'That did not look right. Check your details.' });
       }
-      if (!r.ok) throw new Error(`supabase ${r.status} ${await r.text().catch(() => '')}`);
-
-      // Hash the IP rather than storing it: enough to spot abuse, not enough to track anyone.
-      const ipHash = crypto.createHash('sha256')
-        .update(ip + (process.env.IP_SALT || '')).digest('hex').slice(0, 16);
-      console.log(`lead ${row.p_email} score=${row.p_score} ip=${ipHash}`);
+      console.log(`lead ${row.p_email} score=${row.p_score} ip=${hashIp(ip, cfg.ipSalt)}`);
       return json(res, 201, { ok: true });
     } catch (err) {
       console.error('capture:', err.message);
@@ -314,7 +205,7 @@ server.on('error', err => {
 server.listen(PORT, () => {
   console.log(`Toad Gone Wild running on http://localhost:${PORT}`);
   console.log(`  game:    ${path.join(PUBLIC_DIR, INDEX_FILE)}`);
-  console.log(`  origins: ${ORIGINS.join(', ')}   rate: ${RATE_MAX} per ${RATE_WINDOW / 1000}s`);
+  console.log(`  origins: ${cfg.origins.join(', ')}   rate: ${cfg.rateMax} per ${cfg.rateWindow / 1000}s`);
   if (!fs.existsSync(path.join(PUBLIC_DIR, INDEX_FILE))) {
     console.warn(`  WARNING: ${INDEX_FILE} not found in ${PUBLIC_DIR} -- set PUBLIC_DIR or INDEX_FILE.`);
   }

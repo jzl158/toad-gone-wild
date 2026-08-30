@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/", "destination": "/toad-gone-wild-crossing.html" }
+  ],
+  "headers": [
+    {
+      "source": "/toad-gone-wild-crossing.html",
+      "headers": [
+        { "key": "cache-control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "x-content-type-options", "value": "nosniff" }
+      ]
+    }
+  ]
+}

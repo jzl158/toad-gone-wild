@@ -1,0 +1,15 @@
+# Secrets — the Vercel CLI uploads the local directory, so this matters even
+# though .env is untracked in git. Env vars belong in the Vercel dashboard.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+
+# The long-lived Node server is for local dev / a VPS. Vercel uses api/*.js
+# instead, so excluding it keeps backend source off the deployment entirely.
+backend/
+
+node_modules/
+.git
+*.log

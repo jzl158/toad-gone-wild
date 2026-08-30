@@ -5,10 +5,18 @@ offers "Play again". Everything is wired; you need to add two Supabase values.
 
 ```
 toad-gone-wild-crossing.html   the game + capture form
-backend/server.js              serves the game AND the API, holds the service key
+lib/capture.js                 shared validation, Supabase calls, rate limiting
+api/scores.js                  Vercel function  -> POST /api/scores
+api/leaderboard.js             Vercel function  -> GET  /api/leaderboard
+backend/server.js              long-lived Node server (local dev / VPS)
 backend/schema.sql             table, RLS, capture_lead() RPC, leaderboard view
-backend/.env                   already created — fill in two lines
+backend/.env                   local only — never committed, never deployed
+vercel.json                    routes / to the game
 ```
+
+Two runtimes, one brain: `lib/capture.js` holds all validation, the Supabase
+calls and the rate limiter, and is required by both the Vercel functions and
+the standalone server, so the two cannot drift apart.
 
 The Node server serves the game as well as the API. One origin means no CORS to
 configure and no way to forget it, and one thing to deploy.
@@ -104,17 +112,48 @@ hide anything from you.
 
 ## Deploying
 
-Any host that runs Node works — Fly, Railway, Render, a VPS. Set the same env
-vars, and point `ALLOWED_ORIGINS` at your real origin if you ever split the game
-onto a separate static host (in which case also set `PROD_API` at the top of the
-HTML). Put it behind TLS; the service key deserves it.
+### Vercel (what this repo is set up for)
 
-Serving the game from a static host and Supabase directly from the browser is
-also possible — the schema supports it, since the anon key can only reach
-`capture_lead` and cannot read the table. Set `supabaseUrl` and
-`supabaseAnonKey` in the HTML config and leave `PROD_API` blank. You lose the
-server-side rate limit and the place to hang a welcome email, which is why the
-Node server is the default.
+Set two environment variables in the Vercel dashboard — Settings → Environment
+Variables — and deploy:
+
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<your secret key>
+```
+
+`api/scores.js` and `api/leaderboard.js` are picked up automatically as
+functions; `vercel.json` rewrites `/` to the game. `backend/` is excluded from
+the deployment by `.vercelignore`, along with `.env` at any depth — the Vercel
+CLI uploads your working directory, so that exclusion matters even though
+`.env` is untracked in git.
+
+The game needs no config change: it targets `location.origin`, which on Vercel
+is your deployment URL, so `/api/scores` resolves on the same origin.
+
+**One caveat.** The per-IP rate limit is in-process. On a long-lived server it
+is exact; on Vercel each warm instance keeps its own counter and cold starts
+reset it, so there it is best-effort — it blunts a naive flood but will not
+stop a determined one. What actually bounds abuse is the honeypot plus
+`capture_lead` upserting on email, so hammering one address rewrites one row
+rather than growing the table. If you ever need a real limit, move the counter
+into Postgres or a KV store.
+
+Note that `README.md` and `lib/capture.js` are served as static files at their
+own paths. Neither contains a secret, and both are public on GitHub anyway.
+
+### Anywhere that runs Node
+
+Fly, Railway, Render, a VPS — `backend/server.js` serves the game and the API
+from one process. Set the same env vars, point `ALLOWED_ORIGINS` at your real
+origin if the game is hosted separately, and put it behind TLS.
+
+### Static host, no server at all
+
+The schema supports the browser talking to Supabase directly, since the anon
+key can only reach `capture_lead` and cannot read the table. Set `supabaseUrl`
+and `supabaseAnonKey` in the HTML config. You lose the server-side rate limit
+and honeypot enforcement.
 
 ## Things worth knowing
 

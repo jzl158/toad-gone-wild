@@ -1,0 +1,9 @@
+{
+  "name": "toad-gone-wild",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Four-board crossing game with Supabase-backed lead capture",
+  "scripts": {
+    "dev": "node --env-file=backend/.env backend/server.js"
+  }
+}
