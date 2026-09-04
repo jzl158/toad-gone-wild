@@ -247,17 +247,21 @@
     { type:'road', kind:'truck', dir:-1, speed: 168, w:2.6, gap:5.0, off:110 },
     { type:'curb' }
   ];
+  // Board 1 is the tutorial. Wide platforms, slow lanes, generous gaps: the
+  // tightest landing window here is 1.84s, where it used to be 0.50s. Every
+  // mechanic of the original board is intact -- four road lanes, four water
+  // lanes, one lily pad -- only the timing tolerance changed.
   const L1 = [
     { type:'goal' },
-    { type:'water', kind:'log', dir: 1, speed: 52,  w:3,   gap:2.6, off:0   },
-    { type:'water', kind:'pad', dir:-1, speed: 96,  w:1.4, gap:2.2, off:80  },
-    { type:'water', kind:'log', dir: 1, speed: 74,  w:2,   gap:2.4, off:160 },
-    { type:'water', kind:'log', dir:-1, speed: 44,  w:4,   gap:3.2, off:40  },
+    { type:'water', kind:'log', dir: 1, speed: 40, w:4.0, gap:2.0, off:0   },
+    { type:'water', kind:'pad', dir:-1, speed: 50, w:2.5, gap:1.8, off:80  },
+    { type:'water', kind:'log', dir: 1, speed: 48, w:3.4, gap:1.9, off:160 },
+    { type:'water', kind:'log', dir:-1, speed: 34, w:5.0, gap:2.6, off:40  },
     { type:'safe' },
-    { type:'road', kind:'car', dir:-1, speed: 84,  w:1.6, gap:3.4, off:0,   color:'#E8E2D8' },
-    { type:'road', kind:'car', dir: 1, speed: 128, w:1.3, gap:3.0, off:120, color:'#D4212B' },
-    { type:'road', kind:'van', dir:-1, speed: 158, w:1.5, gap:4.2, off:60,  color:'#EF6FA0' },
-    { type:'road', kind:'bus', dir: 1, speed: 74,  w:2.6, gap:3.6, off:180, color:'#F2B705' },
+    { type:'road', kind:'car', dir:-1, speed: 58, w:1.3, gap:4.0, off:0,   color:'#E8E2D8' },
+    { type:'road', kind:'car', dir: 1, speed: 80, w:1.1, gap:3.8, off:120, color:'#D4212B' },
+    { type:'road', kind:'van', dir:-1, speed: 92, w:1.3, gap:4.8, off:60,  color:'#EF6FA0' },
+    { type:'road', kind:'bus', dir: 1, speed: 54, w:2.0, gap:4.2, off:180, color:'#F2B705' },
     { type:'safe' }
   ];
 
@@ -269,10 +273,10 @@
     { name:'Strokers Lot',      mode:'lot',   top:11, bottom:21, goalCol:6,
       tag:'A lot full of feet. The line keeps moving. <b>They aim for you.</b>' },
     { name:'Respect the Ritual', mode:'club', top:0, bottom:10, goalCol:6,
-      tag:'Free roam the floor. Reach the crowned frog by the stairs. <b>Heels are dropping.</b>' }
+      tag:'Free roam the floor. Reach the crowned frog by the stairs. <b>They aim where you are going.</b>' }
   ];
   const CAM = [33 * CELL, 22 * CELL, 11 * CELL, 0];
-  const TIME = [30, 30, 35, 70];
+  const TIME = [40, 30, 35, 52];   // board 1 relaxed, board 4 tightened
 
   let rows, frog, score, lives, timeLeft, state, level, best, camY, shift,
       runStart = 0, splats = [], queue = [], stomps = [], stompTimer = 0, heels = [], heelTimer = 0,
@@ -316,7 +320,7 @@
   }
 
   function initClub(){
-    frog = { x: CLUB_START[0], y: CLUB_START[1], face:1, bob:0, lift:0, dead:0, hop:1, dir:0, tx:0, ty:0 };
+    frog = { x: CLUB_START[0], y: CLUB_START[1], face:1, bob:0, lift:0, dead:0, hop:1, dir:0, tx:0, ty:0, vx:0, vy:0 };
     heels = []; heelTimer = 0.9; clubFade = 0; timeLeft = TIME[3];
   }
 
@@ -527,9 +531,15 @@
   function spawnHeel(){
     const heat = clubHeat();
     let x, y;
-    if (!frog.dead && Math.random() < 0.42 + heat * 0.26) {          // aimed, with a little lead
-      x = frog.x + (Math.random() - .5) * 70;
-      y = frog.y + (Math.random() - .5) * 46;
+    if (!frog.dead && Math.random() < 0.54 + heat * 0.28) {
+      // Aimed WITH LEAD: the throw is placed where you are going to be, not
+      // where you are. Simply holding a direction no longer saves you -- the
+      // dodge has to be a change of direction after the marker appears.
+      // Pinned against furniture your velocity is zero, so the lead vanishes
+      // and it lands right on you. Hugging walls in here is fatal.
+      const flight = 0.78 - heat * 0.28 + 0.08;
+      x = frog.x + (frog.vx || 0) * flight * 0.90 + (Math.random() - .5) * 48;
+      y = frog.y + (frog.vy || 0) * flight * 0.90 + (Math.random() - .5) * 32;
     } else {
       for (let i = 0; i < 20; i++) {
         x = 40 + Math.random() * (IMG_W - 80);
@@ -537,7 +547,7 @@
         if (walkable(x, y)) break;
       }
     }
-    heels.push({ x, y, t:0, dur: 0.95 - heat * 0.34 + Math.random() * 0.16, hit:false,
+    heels.push({ x, y, t:0, dur: 0.78 - heat * 0.28 + Math.random() * 0.16, hit:false,
                  rot: (Math.random() - .5) * 0.9 });
   }
 
@@ -558,10 +568,15 @@
 
       const sprint = held.has('shift') ? 1.5 : 1;
       const step = CLUB_SPEED * sprint * dt;
+      const px = frog.x, py = frog.y;
       const nx = frog.x + dx * step, ny = frog.y + dy * step * TILT;
       if (walkable(nx, ny)) { frog.x = nx; frog.y = ny; }
       else if (walkable(nx, frog.y)) frog.x = nx;
       else if (walkable(frog.x, ny)) frog.y = ny;
+      // Measured from the move that actually happened, so a blocked frog
+      // reads as stationary and the heels stop leading it.
+      frog.vx = (frog.x - px) / dt;
+      frog.vy = (frog.y - py) / dt;
       frog.bob += (frog.moving ? 13 * sprint : 2.4) * dt;
 
       let bestZ = 'the floor', bd = 1e9;
@@ -576,16 +591,16 @@
 
     const heat = clubHeat();
     heelTimer -= dt;
-    if (heelTimer <= 0 && heels.length < 12) {
-      heelTimer = (0.52 - heat * 0.26) + Math.random() * 0.22;
+    if (heelTimer <= 0 && heels.length < 20) {
+      heelTimer = (0.36 - heat * 0.17) + Math.random() * 0.22;
       spawnHeel();
-      if (Math.random() < 0.26 + heat * 0.40) spawnHeel();
+      if (Math.random() < 0.42 + heat * 0.42) spawnHeel();
     }
     for (const s of heels) {
       s.t += dt;
       if (!s.hit && s.t >= s.dur) {
         s.hit = true; shake = 13;
-        if (!frog.dead && Math.hypot(frog.x - s.x, frog.y - s.y) < 30) { die('heel'); return; }
+        if (!frog.dead && Math.hypot(frog.x - s.x, frog.y - s.y) < 36) { die('heel'); return; }
       }
     }
     heels = heels.filter(s => s.t < s.dur + 0.5);

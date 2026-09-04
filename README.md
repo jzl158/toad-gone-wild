@@ -155,6 +155,40 @@ key can only reach `capture_lead` and cannot read the table. Set `supabaseUrl`
 and `supabaseAnonKey` in the HTML config. You lose the server-side rate limit
 and honeypot enforcement.
 
+## Level tuning
+
+Boards 1 and 4 had their difficulty swapped, without changing what either board
+*is*. Board 1 still has four road lanes, four water lanes and a single lily
+pad; board 4 is still a free-roam floor with heels dropping on telegraphs.
+Only the constants moved.
+
+**Board 1 is now the tutorial.** Wider platforms, slower lanes, bigger gaps,
+40s instead of 30s. Its tightest landing window — the lily-pad lane — went from
+**0.50s to 1.84s**. Simulated against the game's own collision rules with a
+player whose timing is off by up to 0.3s, survival went from 23% to 56%.
+
+**Board 4 is now the wall.** The `spawnHeel` comment always claimed the aimed
+throws had "a little lead" but the code just used `frog.x`/`frog.y`, so a
+moving target was never in danger — measured survival for a player who knew the
+route was 97%. The lead is now real: throws land where you are *going*. Holding
+one direction no longer works; you have to change direction after the marker
+appears. Denser spawns, a shorter telegraph, a larger hit radius, and 52s
+instead of 70s finish the job.
+
+Lead is computed from the movement that actually happened, not the input, so a
+frog pinned against furniture reads as stationary and the heels land right on
+it. Hugging walls in there is fatal, deliberately.
+
+Measured over 2500 simulated crossings each:
+
+| | before | after |
+|---|---|---|
+| runs the route, never reacts | 98% | 0% walking, 16% sprinting |
+| reacts to markers | 99% | 70% walking, 98% sprinting |
+
+The reacting model has perfect information and instant reflexes, so a human
+sits below its numbers — treat them as the ceiling, not the expectation.
+
 ## Things worth knowing
 
 **The score is a claim, not a fact.** It is computed and posted by the browser,
