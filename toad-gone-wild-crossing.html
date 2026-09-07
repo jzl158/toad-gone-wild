@@ -87,6 +87,14 @@
   .cap .fine{margin:0;font-size:10.5px;line-height:1.35;color:#6E6560;text-align:center}
   .capdone{display:none;margin:0;max-width:32ch;font-size:14px;font-weight:700;color:var(--yellow)}
   .capdone.show{display:block}
+  /* Shown whenever the form is suppressed, so entering a name and email is
+     never actually unavailable -- only un-nagged. */
+  .caplink{display:none;background:none;border:none;color:var(--yellow);cursor:pointer;
+    font-family:"Barlow Condensed",Arial Narrow,sans-serif;font-weight:800;font-size:12.5px;
+    letter-spacing:.09em;text-transform:uppercase;text-decoration:underline;
+    text-underline-offset:3px;padding:5px 8px}
+  .caplink.show{display:inline-block}
+  .caplink:active{color:#fff}
 </style>
 </head>
 <body>
@@ -122,6 +130,7 @@
         <p class="fine">We only email you about Toad Gone Wild. Unsubscribe anytime.</p>
       </form>
       <p class="capdone" id="capDone"></p>
+      <button class="caplink" id="capOpen" type="button">Get on the board</button>
       <button id="ovBtn">Start</button>
     </div>
   </div>
@@ -1294,6 +1303,7 @@
     const fSend = document.getElementById('capSend');
     const fSkip = document.getElementById('capSkip');
     const fDone = document.getElementById('capDone');
+    const capOpen = document.getElementById('capOpen');
     const fLead = document.getElementById('capLead');
     const screenBox = document.querySelector('.screen');
 
@@ -1409,39 +1419,59 @@
     });
 
     fSkip.addEventListener('click', () => {
-      skipped = true;                                          // do not ask again on later deaths
+      skipped = true;                                          // stop volunteering it on later deaths
       finish('No hard feelings. The swamp remembers anyway.');
+      offer(run);                                              // but leave the door open
     });
 
+    // The suppressed case still needs a way in. Without this, a player who
+    // skipped once, or whose run did not beat a score they had already banked,
+    // had no route to the form at all -- the feature looked like it had gone.
+    let pending = null;
+    function offer(payload){
+      if (!payload) return;
+      pending = payload;
+      capOpen.classList.add('show');
+    }
+    const unoffer = () => { capOpen.classList.remove('show'); };
+
+    function openForm(payload, isLoss){
+      run = payload; busy = false; lost = !!isLoss;
+      unoffer(); clearErr();
+      fLead.textContent = lost ? 'Save your rank' : 'Get on the board';
+      const me = ls.get(MEKEY, null);
+      if (me) { fName.value = me.name || ''; fMail.value = me.email || ''; }
+      fHp.value = '';
+      fSend.disabled = fSkip.disabled = false; fSend.textContent = 'Claim score';
+      fDone.classList.remove('show'); fDone.textContent = '';
+      form.classList.add('show');
+      ov.classList.add('capture-on');
+      screenBox.classList.add('capture-on');
+      ovBtn.style.display = 'none';                            // the form owns the exit until it is done
+      (me ? fSend : fName).focus();
+    }
+
+    capOpen.addEventListener('click', () => { if (pending) openForm(pending, true); });
+
     return {
-      // opts.lost marks a game over rather than a win. Winning always asks;
-      // losing asks only when there is something to gain, so a player dying
-      // over and over is not handed the same form every time.
+      // opts.lost marks a game over rather than a win. Winning always opens the
+      // form; losing opens it only when there is something to gain, and offers
+      // the link otherwise rather than showing nothing.
       open(payload, opts = {}){
-        if (opts.lost) {
-          if (skipped) return;
-          if (payload.score <= ls.get(BESTKEY, -1)) return;
+        unoffer();
+        if (opts.lost && (skipped || payload.score <= ls.get(BESTKEY, -1))) {
+          offer(payload);
+          return;
         }
-        run = payload; busy = false; lost = !!opts.lost;
-        clearErr();
-        fLead.textContent = lost ? 'Save your rank' : 'Get on the board';
-        const me = ls.get(MEKEY, null);
-        if (me) { fName.value = me.name || ''; fMail.value = me.email || ''; }
-        fHp.value = '';
-        fSend.disabled = fSkip.disabled = false; fSend.textContent = 'Claim score';
-        fDone.classList.remove('show'); fDone.textContent = '';
-        form.classList.add('show');
-        ov.classList.add('capture-on');
-        screenBox.classList.add('capture-on');
-        ovBtn.style.display = 'none';                          // the form owns the exit until it is done
-        (me ? fSend : fName).focus();
+        openForm(payload, opts.lost);
       },
       close(){
-        run = null;
+        run = null; pending = null;
         form.classList.remove('show');
         fDone.classList.remove('show');
         ov.classList.remove('capture-on');
         screenBox.classList.remove('capture-on');
+        unoffer();
         ovBtn.style.display = '';
       },
       flush
