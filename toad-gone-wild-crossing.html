@@ -92,7 +92,7 @@
   <div class="tag" id="tag">Four lanes of traffic. Four lanes of water. <b>One lily pad.</b></div>
   <div class="hud">
     <div class="stat"><span>Score</span><strong id="score">0</strong></div>
-    <div class="stat"><span>Lives</span><strong id="lives">3</strong></div>
+    <div class="stat"><span>Lives</span><strong id="lives">6</strong></div>
     <div class="stat lvl"><span>Level</span><strong id="lvl">1/4</strong></div>
     <div class="clock"><span>Toadal mayhem</span><div class="bar" id="bar"><i id="barfill"></i></div></div>
   </div>
@@ -297,6 +297,7 @@
       tag:'Free roam the floor. Reach the crowned frog by the stairs. <b>They aim where you are going.</b>' }
   ];
   const CAM = [33 * CELL, 22 * CELL, 11 * CELL, 0];
+  const LIVES = 6;
   const TIME = [40, 30, 32, 52];   // board 1 relaxed, board 3 a step past 2, board 4 tightened
 
   let rows, frog, score, lives, timeLeft, state, level, best, camY, shift,
@@ -338,7 +339,7 @@
   }
   function newGame(){
     buildRows();
-    score = 0; lives = 3; splats = []; level = 0; camY = CAM[0];
+    score = 0; lives = LIVES; splats = []; level = 0; camY = CAM[0];
     runStart = performance.now();
     placeFrog(0); state = 'play'; syncHud();
   }
@@ -827,8 +828,6 @@
       const g = ctx.createLinearGradient(0, y, 0, y + CELL);
       g.addColorStop(0, '#4A0F32'); g.addColorStop(1, '#2A0A22');
       ctx.fillStyle = g; ctx.fillRect(0, y, W, CELL);
-      ctx.fillStyle = 'rgba(239,111,160,.5)'; ctx.font = '800 11px "Barlow Condensed",sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('V I P   L O U N G E', W / 2, y + 12);
       const cx = LV[0].goalCol * CELL + CELL / 2, cy = y + CELL / 2 + 3;
       ctx.fillStyle = '#1C4A26';
       ctx.beginPath(); ctx.arc(cx, cy, 16, 0.45, Math.PI * 2 + 0.15); ctx.lineTo(cx, cy); ctx.fill();
@@ -1577,7 +1576,7 @@
   Capture.flush();
 
   buildRows();
-  score = 0; lives = 3; level = 0; camY = CAM[0];
+  score = 0; lives = LIVES; level = 0; camY = CAM[0];
   placeFrog(0); state = 'start'; syncHud();
   requestAnimationFrame(frame);
 })();
