@@ -234,7 +234,24 @@
 
   // ================= GRID LEVELS =================
   const L4VOID = Array.from({ length:11 }, () => ({ type:'clubvoid' }));
-  const L3 = [{ type:'strokers' }].concat(Array.from({ length:10 }, () => ({ type:'lot' })));
+  // Board 3: the lot outside Strokers, now on the same lane grammar as boards
+  // 1 and 2 -- three kinds of traffic, two curbs to regroup on, the club door
+  // at the top. Pitched a step above board 2: tightest window 0.90s against
+  // board 2's 1.09s. The queue lanes are the twist: long bunched blocks of
+  // people with rare gaps, so they read as slow but are the hardest to time.
+  const L3 = [
+    { type:'strokers' },
+    { type:'curb' },
+    { type:'road', kind:'sports',  dir: 1, speed:150, w:1.5, gap:4.0, off:0,   color:'#E24A3C' },
+    { type:'road', kind:'sneaker', dir:-1, speed: 92, w:1.6, gap:2.6, off:70  },
+    { type:'road', kind:'queue',   dir: 1, speed: 46, w:3.4, gap:2.6, off:150 },
+    { type:'curb' },
+    { type:'road', kind:'sports',  dir:-1, speed:168, w:1.4, gap:4.2, off:40,  color:'#F2B705' },
+    { type:'road', kind:'sneaker', dir: 1, speed:104, w:1.6, gap:2.8, off:110 },
+    { type:'road', kind:'queue',   dir:-1, speed: 52, w:3.0, gap:2.4, off:30  },
+    { type:'road', kind:'sports',  dir: 1, speed:140, w:1.7, gap:3.8, off:190, color:'#B04CE0' },
+    { type:'curb' }
+  ];
   const L2 = [
     { type:'underground' }, { type:'curb' },
     { type:'road', kind:'dog',   dir:-1, speed: 96,  w:1.25, gap:3.6, off:0   },
@@ -270,13 +287,13 @@
       tag:'Four lanes of traffic. Four lanes of water. <b>One lily pad.</b>' },
     { name:'Underground Plaza', mode:'lanes', top:22, bottom:32, goalCol:6,
       tag:'Bulldogs, badges, and box trucks. <b>One way underground.</b>' },
-    { name:'Strokers Lot',      mode:'lot',   top:11, bottom:21, goalCol:6,
-      tag:'A lot full of feet. The line keeps moving. <b>They aim for you.</b>' },
+    { name:'Strokers Lot',      mode:'lanes', top:11, bottom:21, goalCol:6,
+      tag:'Sports cars, sneakers, and a line that will not break. <b>The door is at the top.</b>' },
     { name:'Respect the Ritual', mode:'club', top:0, bottom:10, goalCol:6,
       tag:'Free roam the floor. Reach the crowned frog by the stairs. <b>They aim where you are going.</b>' }
   ];
   const CAM = [33 * CELL, 22 * CELL, 11 * CELL, 0];
-  const TIME = [40, 30, 35, 52];   // board 1 relaxed, board 4 tightened
+  const TIME = [40, 30, 32, 52];   // board 1 relaxed, board 3 a step past 2, board 4 tightened
 
   let rows, frog, score, lives, timeLeft, state, level, best, camY, shift,
       runStart = 0, splats = [], queue = [], stomps = [], stompTimer = 0, heels = [], heelTimer = 0,
@@ -296,7 +313,7 @@
       const wpx = l.w * CELL, span = wpx + l.gap * CELL;
       const n = Math.ceil((W + span) / span) + 1;
       const items = [];
-      for (let k = 0; k < n; k++) items.push({ x: k * span - (l.off || 0), w: wpx });
+      for (let k = 0; k < n; k++) items.push({ x: k * span - (l.off || 0), w: wpx, seed: k });
       return { ...l, lvl, items, total: n * span };
     });
   }
@@ -906,6 +923,19 @@
           ctx.beginPath(); ctx.moveTo(0, y + CELL); ctx.lineTo(W, y + CELL); ctx.stroke();
           ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(0, y + 1, W, 2);
         }
+      } else if (l.lvl === 2) {
+        // Board 3's lanes keep the parking-lot surface the old 'lot' rows had,
+        // so converting it to lane traffic did not change what the place looks like.
+        const g = ctx.createLinearGradient(0, y, 0, y + CELL);
+        g.addColorStop(0, '#9E97A8'); g.addColorStop(1, '#948DA0');
+        ctx.fillStyle = g; ctx.fillRect(0, y, W, CELL);
+        for (let i = 0; i < 50; i++) {
+          const n1 = nz(i, r), n2 = nz(r, i);
+          ctx.fillStyle = n1 > .5 ? 'rgba(232,214,222,.10)' : 'rgba(60,48,66,.10)';
+          ctx.fillRect(n1 * W, y + n2 * CELL, 2, 2);
+        }
+        ctx.strokeStyle = 'rgba(238,228,214,.26)'; ctx.lineWidth = 2; ctx.setLineDash([16, 18]);
+        ctx.beginPath(); ctx.moveTo(0, y + CELL); ctx.lineTo(W, y + CELL); ctx.stroke(); ctx.setLineDash([]);
       } else {
         ctx.fillStyle = r % 2 ? '#1B181D' : '#201C23'; ctx.fillRect(0, y, W, CELL);
         ctx.strokeStyle = 'rgba(242,183,5,.22)'; ctx.lineWidth = 2; ctx.setLineDash([14, 16]);
@@ -1121,6 +1151,102 @@
     ctx.fillStyle = '#2E7D3C';
     ctx.beginPath(); ctx.ellipse(cx, cy, w / 2, CELL / 2 - 6, 0, 0.4, Math.PI * 2 + 0.1); ctx.lineTo(cx, cy); ctx.fill();
   }
+  // ---- board 3: the lot ----
+  function drawQueueLine(x, y, w, dir, seed){
+    const cy = y + CELL / 2;
+    const n = Math.max(2, Math.round(w / 30));
+    const step = w / n;
+    ctx.strokeStyle = 'rgba(176,76,224,.30)'; ctx.lineWidth = 2;      // velvet rope
+    ctx.beginPath(); ctx.moveTo(x + 1, cy + 14); ctx.lineTo(x + w - 1, cy + 14); ctx.stroke();
+    // Same build as drawPerson: wide shoulders, small head, arms showing at the
+    // sides. Head-on-body proportions are what make these read as a queue and
+    // not a row of coins.
+    for (let i = 0; i < n; i++) {
+      const px = x + step * (i + 0.5);
+      const k = (seed * 7 + i * 5) % FIT.length, sk = (seed * 3 + i * 2) % SKIN.length;
+      const bob = Math.sin(performance.now() / 620 + i * 1.1 + seed) * 1.2;
+      ctx.fillStyle = 'rgba(40,30,44,.32)';
+      ctx.beginPath(); ctx.ellipse(px + 3, cy + 8, 12, 4.5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = FIT[k];                                    // shoulders, wide
+      ctx.beginPath(); ctx.ellipse(px, cy + 1 + bob, 13, 9.5, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(24,16,26,.45)'; ctx.lineWidth = 1;  // separate neighbours
+      ctx.beginPath(); ctx.ellipse(px, cy + 1 + bob, 13, 9.5, 0, 0, 7); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.20)';
+      ctx.beginPath(); ctx.ellipse(px - 3.5, cy - 1.5 + bob, 7, 4, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = SKIN[sk];                                   // arms
+      ctx.beginPath(); ctx.arc(px - 12, cy + 4 + bob, 2.7, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + 12, cy + 4 + bob, 2.7, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(px, cy - 2 + bob, 5.4, 0, 7); ctx.fill();   // head, smaller
+      ctx.fillStyle = 'rgba(34,24,30,.8)';                        // hair cap only
+      ctx.beginPath(); ctx.arc(px, cy - 3.4 + bob, 4.4, 0, 7); ctx.fill();
+    }
+  }
+
+  function drawSneaker(x, y, w, dir){
+    ctx.save(); ctx.translate(x + w / 2, y + CELL / 2); if (dir < 0) ctx.scale(-1, 1);
+    const bw = w - 4, bx = -bw / 2;
+    ctx.translate(0, Math.sin(performance.now() / 140 + x * 0.05) * 0.7);   // walking bounce
+    ctx.fillStyle = 'rgba(0,0,0,.42)';
+    ctx.beginPath(); ctx.ellipse(0, 11, bw / 2, 3, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#F2EDE4';                                             // sole, toe upturned
+    ctx.beginPath();
+    ctx.moveTo(bx, 2);
+    ctx.quadraticCurveTo(bx - 1, 8, bx + 6, 8.5);
+    ctx.lineTo(bx + bw - 7, 8.5);
+    ctx.quadraticCurveTo(bx + bw, 8, bx + bw, 1);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.fillRect(bx + 3, 5.6, bw - 8, 1.4);
+    ctx.fillStyle = '#D4212B';                                             // upper
+    ctx.beginPath();
+    ctx.moveTo(bx + 1, 2.5);
+    ctx.lineTo(bx + 2, -5);
+    ctx.quadraticCurveTo(bx + bw * 0.32, -9.5, bx + bw * 0.58, -6);
+    ctx.quadraticCurveTo(bx + bw * 0.85, -3.2, bx + bw - 1, 1.5);
+    ctx.lineTo(bx + bw - 1, 2.5);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#F2EDE4';                                             // toe cap
+    ctx.beginPath();
+    ctx.moveTo(bx + bw - 13, 2.5);
+    ctx.quadraticCurveTo(bx + bw - 3, 1.8, bx + bw - 1, 1.5);
+    ctx.lineTo(bx + bw - 1, 2.5); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.92)'; ctx.lineWidth = 1.8;        // swoosh
+    ctx.beginPath(); ctx.moveTo(bx + bw * 0.18, 1.5);
+    ctx.quadraticCurveTo(bx + bw * 0.46, -1.5, bx + bw * 0.64, -6); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1;           // laces
+    for (let i = 0; i < 3; i++) {
+      const lx = bx + bw * (0.26 + i * 0.12);
+      ctx.beginPath(); ctx.moveTo(lx, -3 - i * 1.3); ctx.lineTo(lx + 4.5, -5 - i * 1.3); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawSportsCar(x, y, w, dir, color){
+    const h = CELL - 16;
+    ctx.save(); ctx.translate(x + w / 2, y + CELL / 2); if (dir < 0) ctx.scale(-1, 1);
+    const bx = -w / 2;
+    ctx.fillStyle = 'rgba(0,0,0,.5)';
+    ctx.beginPath(); ctx.ellipse(0, h / 2 + 2, w / 2 - 1, 4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = color;                                               // low wedge
+    ctx.beginPath();
+    ctx.moveTo(bx + 2, h / 2); ctx.lineTo(bx + 2, -1);
+    ctx.quadraticCurveTo(bx + w * 0.34, -h / 2 - 3, bx + w * 0.62, -h / 2 - 1);
+    ctx.quadraticCurveTo(bx + w * 0.86, -h / 2 + 1, bx + w - 2, 0);
+    ctx.lineTo(bx + w - 2, h / 2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.16)';
+    rr(bx + 4, -h / 2 + 1, w * 0.5, 3, 2); ctx.fill();
+    ctx.fillStyle = 'rgba(18,14,24,.75)';                                // glass
+    ctx.beginPath();
+    ctx.moveTo(bx + w * 0.30, -2);
+    ctx.quadraticCurveTo(bx + w * 0.44, -h / 2 + 1, bx + w * 0.60, -h / 2 + 2);
+    ctx.lineTo(bx + w * 0.72, -2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = color; ctx.fillRect(bx + 1, -h / 2 + 1, 4, 6);       // spoiler
+    ctx.fillStyle = '#141018';                                           // wheels
+    ctx.beginPath(); ctx.ellipse(bx + w * 0.24, h / 2 - 1, 6, 4.6, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + w * 0.76, h / 2 - 1, 6, 4.6, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#FFF3C4'; ctx.fillRect(bx + w - 7, -4, 5, 3);       // headlight
+    ctx.restore();
+  }
+
   function drawVehicle(x, y, w, h, l){
     const front = l.dir > 0 ? x + w : x;
     ctx.fillStyle = 'rgba(0,0,0,.45)'; rr(x + 2, y + h - 5, w - 4, 6, 3); ctx.fill();
@@ -1322,6 +1448,9 @@
         else if (l.kind === 'dog') drawBulldog(it.x, y, it.w, l.dir);
         else if (l.kind === 'cop') drawOfficer(it.x, y, it.w, l.dir);
         else if (l.kind === 'truck') drawRedDogTruck(it.x, y, it.w, l.dir);
+        else if (l.kind === 'queue') drawQueueLine(it.x, y, it.w, l.dir, it.seed);
+        else if (l.kind === 'sneaker') drawSneaker(it.x, y, it.w, l.dir);
+        else if (l.kind === 'sports') drawSportsCar(it.x, y, it.w, l.dir, l.color);
         else drawVehicle(it.x, y + 7, it.w, CELL - 14, l);
       }
     }
