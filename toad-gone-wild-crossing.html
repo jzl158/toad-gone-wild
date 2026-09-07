@@ -296,7 +296,7 @@
   const TIME = [40, 30, 32, 52];   // board 1 relaxed, board 3 a step past 2, board 4 tightened
 
   let rows, frog, score, lives, timeLeft, state, level, best, camY, shift,
-      runStart = 0, splats = [], queue = [], stomps = [], stompTimer = 0, heels = [], heelTimer = 0,
+      runStart = 0, splats = [], heels = [], heelTimer = 0,
       clubFade = 0, zoneName = '', showMask = false, shake = 0, t0 = 0;
 
   const fCol = () => Math.round((frog.x - CELL / 2) / CELL);
@@ -318,23 +318,6 @@
     });
   }
 
-  const QUEUE_ROWS = [13, 15, 17, 19];
-  function initLot(){
-    queue = QUEUE_ROWS.map((row, i) => ({
-      row, gap: [1, 8, 3, 9][i], dirn: i % 2 ? -1 : 1,
-      dur: 1.55 - i * 0.17, t: 0.8 + i * 0.28, warn:false
-    }));
-    stomps = []; stompTimer = 0.5;
-  }
-  const qAt = row => queue.find(q => q.row === row);
-  function isPerson(row, col){
-    const q = qAt(row); if (!q) return false;
-    return !(col >= q.gap && col <= q.gap + 1);
-  }
-  function blocked(row, col){
-    if (LV[level].mode === 'lot') return isPerson(row, col);
-    return false;
-  }
 
   function initClub(){
     frog = { x: CLUB_START[0], y: CLUB_START[1], face:1, bob:0, lift:0, dead:0, hop:1, dir:0, tx:0, ty:0, vx:0, vy:0 };
@@ -348,7 +331,6 @@
     const y = L.bottom * CELL + CELL / 2;
     frog = { x, y, tx:x, ty:y, dir:0, hop:1, dead:0 };
     best = L.bottom; timeLeft = TIME[lv];
-    if (L.mode === 'lot') initLot();
   }
   function newGame(){
     buildRows();
@@ -368,12 +350,7 @@
     const [dx, dy, ang] = DIRS[d];
     const ny = frog.ty + dy * CELL;
     if (ny < L.top * CELL + CELL / 2 - 1 || ny > L.bottom * CELL + CELL / 2 + 1) return;
-    let nx;
-    if (L.mode === 'lanes') nx = Math.max(CELL / 2 - CELL, Math.min(W - CELL / 2 + CELL, frog.tx + dx * CELL));
-    else {
-      nx = Math.max(CELL / 2, Math.min(W - CELL / 2, frog.tx + dx * CELL));
-      if (blocked(Math.round((ny - CELL / 2) / CELL), Math.round((nx - CELL / 2) / CELL))) return;
-    }
+    const nx = Math.max(CELL / 2 - CELL, Math.min(W - CELL / 2 + CELL, frog.tx + dx * CELL));
     frog.dir = ang; frog.tx = nx; frog.ty = ny; frog.hop = 0;
     const row = Math.round((ny - CELL / 2) / CELL);
     if (dy < 0 && row < best) { best = row; score += 10; syncHud(); }
@@ -498,48 +475,6 @@
       if (l.dir < 0 && it.x + it.w < 0) it.x += l.total;
     }
   }
-  function spawnDrop(rowLo, rowHi, dur, aim){
-    for (let tries = 0; tries < 14; tries++) {
-      let row, col;
-      if (!frog.dead && Math.random() < aim) { row = fRow() + ri(-1, 1); col = fCol() + ri(-1, 1); }
-      else { row = ri(rowLo, rowHi); col = ri(0, COLS - 1); }
-      row = clamp(row, rowLo, rowHi); col = clamp(col, 0, COLS - 1);
-      if (blocked(row, col)) continue;
-      if (stomps.some(s => s.row === row && s.col === col)) continue;
-      stomps.push({ row, col, t:0, dur, hit:false }); return;
-    }
-  }
-  function resolveDrops(dt){
-    for (const s of stomps) {
-      s.t += dt;
-      if (!s.hit && s.t >= s.dur) {
-        s.hit = true; shake = 11;
-        if (!frog.dead && fRow() === s.row && fCol() === s.col) { die('stomp'); return; }
-      }
-    }
-    stomps = stomps.filter(s => s.t < s.dur + 0.55);
-  }
-  function updateLot(dt){
-    const heat = clamp(1 - timeLeft / TIME[2], 0, 1);
-    for (const q of queue) {
-      q.t -= dt * (1 + heat * 0.5);
-      q.warn = q.t < 0.36;
-      if (q.t <= 0) {
-        let ng = q.gap + q.dirn;
-        if (ng < 0) { ng = 0; q.dirn = 1; }
-        if (ng > COLS - 2) { ng = COLS - 2; q.dirn = -1; }
-        q.gap = ng; q.t = q.dur; q.warn = false;
-        if (!frog.dead && fRow() === q.row && isPerson(q.row, fCol())) { die('stomp'); return; }
-      }
-    }
-    stompTimer -= dt;
-    if (stompTimer <= 0 && stomps.length < 9) {
-      stompTimer = (0.42 - heat * 0.20) + Math.random() * 0.20;
-      spawnDrop(12, 21, 0.74 - heat * 0.24 + Math.random() * 0.12, 0.34 + heat * 0.26);
-      if (Math.random() < 0.24 + heat * 0.36) spawnDrop(12, 21, 0.7 - heat * 0.2, 0.3);
-    }
-    resolveDrops(dt);
-  }
 
   // ---- the club floor ----
   const CLUB_SPEED = 210, TILT = 0.60;
@@ -647,7 +582,6 @@
     if (L.mode === 'club') { updateClubTimer(dt); updateClub(dt); return; }
 
     for (const l of rows) if (l.speed) moveLane(l, dt);
-    if (L.mode === 'lot') updateLot(dt);
     if (frog.dead) return;
 
     if (frog.hop < 1) {
@@ -884,7 +818,6 @@
       ctx.fillRect(0, y + CELL - 2, W, 1.5);
     }
     else if (l.type === 'strokers') drawStorefront(y);
-    else if (l.type === 'lot') drawLot(y, r);
     else if (l.type === 'underground') drawUnderground(y);
     else if (l.type === 'goal') {
       const g = ctx.createLinearGradient(0, y, 0, y + CELL);
@@ -1013,21 +946,6 @@
     ctx.fillStyle = '#1B2416'; ctx.font = '800 12px "Barlow Condensed",sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('UNDERGROUND', cx, y + 14);
   }
-  function drawLot(y, r){
-    const g = ctx.createLinearGradient(0, y, 0, y + CELL);
-    g.addColorStop(0, '#9E97A8'); g.addColorStop(1, '#948DA0');
-    ctx.fillStyle = g; ctx.fillRect(0, y, W, CELL);
-    ctx.strokeStyle = 'rgba(238,228,214,.32)'; ctx.lineWidth = 2;
-    for (let px2 = 20; px2 < W; px2 += 80) { ctx.beginPath(); ctx.moveTo(px2, y); ctx.lineTo(px2, y + CELL * 0.55); ctx.stroke(); }
-    for (let i = 0; i < 70; i++) {
-      const n1 = nz(i, r), n2 = nz(r, i);
-      ctx.fillStyle = n1 > .5 ? 'rgba(232,214,222,.10)' : 'rgba(60,48,66,.10)';
-      ctx.fillRect(n1 * W, y + n2 * CELL, 2, 2);
-    }
-    const pool = ctx.createRadialGradient(W / 2, y - (r - 11) * 6, 10, W / 2, y - (r - 11) * 6, 260);
-    pool.addColorStop(0, 'rgba(232,178,150,.16)'); pool.addColorStop(1, 'rgba(232,178,150,0)');
-    ctx.fillStyle = pool; ctx.fillRect(0, y, W, CELL);
-  }
   function drawStorefront(y){
     const sky = ctx.createLinearGradient(0, y, 0, y + 12);
     sky.addColorStop(0, '#B7B2C6'); sky.addColorStop(1, '#C8AFB4');
@@ -1074,71 +992,6 @@
   }
   const FIT = ['#C97B84','#8FA98A','#E0B96A','#7E8BA8','#B98FA6','#6E7F76','#D4A28C','#5E5A6E'];
   const SKIN = ['#6B4A33','#8A5E42','#C0895F','#E0B48C','#4E3526'];
-  function drawPerson(col, row){
-    const cx = col * CELL + CELL / 2, cy = row * CELL + CELL / 2;
-    const k = (row * 17 + col * 7) % FIT.length, sk = (row * 5 + col * 3) % SKIN.length;
-    const bob = Math.sin(performance.now() / 700 + col * 1.3 + row) * 1.2;
-    ctx.fillStyle = 'rgba(58,44,60,.30)';
-    ctx.beginPath(); ctx.ellipse(cx + 3, cy + 8, 13, 5, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = FIT[k]; ctx.beginPath(); ctx.ellipse(cx, cy + bob, 13, 9, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.ellipse(cx - 3, cy - 2 + bob, 7, 4, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = SKIN[sk];
-    ctx.beginPath(); ctx.arc(cx - 12, cy + 3 + bob, 2.6, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + 12, cy + 3 + bob, 2.6, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx, cy - 1 + bob, 6.4, 0, 7); ctx.fill();
-    ctx.fillStyle = 'rgba(30,22,26,.82)'; ctx.beginPath(); ctx.arc(cx, cy - 2.4 + bob, 5.6, 0, 7); ctx.fill();
-  }
-  function drawCrowd(){
-    for (const q of queue) {
-      const filling = q.dirn > 0 ? q.gap : q.gap + 1;
-      for (let c = 0; c < COLS; c++) if (isPerson(q.row, c)) drawPerson(c, q.row);
-      if (q.warn) {
-        const cx = filling * CELL + CELL / 2, cy = q.row * CELL + CELL / 2;
-        const pulse = 0.4 + 0.5 * Math.abs(Math.sin(performance.now() / 90));
-        ctx.strokeStyle = `rgba(240,210,150,${pulse})`; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
-        ctx.beginPath(); ctx.arc(cx, cy, 15, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-      }
-    }
-  }
-  function dropShadow(s){
-    const cx = s.col * CELL + CELL / 2, cy = s.row * CELL + CELL / 2;
-    if (s.hit) {
-      const a = 1 - (s.t - s.dur) / 0.55;
-      ctx.save(); ctx.globalAlpha = Math.max(0, a) * 0.5; ctx.fillStyle = '#3A2C3C';
-      ctx.beginPath(); ctx.ellipse(cx, cy - 3, 8, 11, 0, 0, 7); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx + 1, cy + 11, 8, 5.5, 0, 0, 7); ctx.fill();
-      ctx.restore(); return;
-    }
-    const p = s.t / s.dur, k = 0.3 + p * 0.7;
-    ctx.save(); ctx.globalAlpha = 0.16 + p * 0.44; ctx.fillStyle = '#2E2334';
-    ctx.beginPath(); ctx.ellipse(cx, cy - 3 * k, 9 * k, 12 * k, 0, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(cx + 1, cy + 11 * k, 8 * k, 5.5 * k, 0, 0, 7); ctx.fill();
-    ctx.restore();
-    if (p > 0.45) {
-      ctx.strokeStyle = `rgba(226,120,120,${(p - 0.45) * 1.8})`; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(cx, cy, 17, 0, 7); ctx.stroke();
-    }
-  }
-  function dropObject(s){
-    const cx = s.col * CELL + CELL / 2, cy = s.row * CELL + CELL / 2;
-    if (s.hit) {
-      const a = 1 - (s.t - s.dur) / 0.55;
-      ctx.save(); ctx.globalAlpha = Math.max(0, a);
-      ctx.strokeStyle = '#EDE0DC'; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(cx, cy, 12 + (1 - a) * 26, 0, 7); ctx.stroke();
-      ctx.fillStyle = '#F2EDE4'; ctx.font = '800 13px "Barlow Condensed",sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('STOMP', cx, cy - 20 - (1 - a) * 10);
-      ctx.restore(); return;
-    }
-    const p = s.t / s.dur, k = 0.32 + p * 0.68;
-    ctx.save(); ctx.globalAlpha = 0.3 + p * 0.7;
-    ctx.translate(cx, cy); ctx.scale(k, k);
-    ctx.fillStyle = '#4A3A46'; rr(-10, -16, 20, 24, 8); ctx.fill();
-    ctx.fillStyle = '#5C4A58'; rr(-9, 8, 18, 10, 4); ctx.fill();
-    ctx.fillStyle = 'rgba(20,14,20,.35)';
-    for (let i = -8; i < 8; i += 4) ctx.fillRect(i, -12, 2, 16);
-    ctx.restore();
-  }
   function drawLog(x, y, w, h){
     ctx.fillStyle = '#3A2618'; rr(x, y, w, h, 7); ctx.fill();
     ctx.fillStyle = '#54371F'; rr(x + 2, y + 2, w - 4, h - 7, 6); ctx.fill();
@@ -1158,9 +1011,8 @@
     const step = w / n;
     ctx.strokeStyle = 'rgba(176,76,224,.30)'; ctx.lineWidth = 2;      // velvet rope
     ctx.beginPath(); ctx.moveTo(x + 1, cy + 14); ctx.lineTo(x + w - 1, cy + 14); ctx.stroke();
-    // Same build as drawPerson: wide shoulders, small head, arms showing at the
-    // sides. Head-on-body proportions are what make these read as a queue and
-    // not a row of coins.
+    // Wide shoulders, small head, arms showing at the sides. Those proportions
+    // are what make these read as a queue and not a row of coins.
     for (let i = 0; i < n; i++) {
       const px = x + step * (i + 0.5);
       const k = (seed * 7 + i * 5) % FIT.length, sk = (seed * 3 + i * 2) % SKIN.length;
@@ -1455,12 +1307,9 @@
       }
     }
 
-    const inLot = camY >= 11 * CELL && camY < 22 * CELL;
     const squash = frog.hop < 1 ? Math.sin(frog.hop * Math.PI) * 0.22 : 0;
-    if (inLot && queue.length) { drawCrowd(); stomps.forEach(dropShadow); }
     splats.filter(s => !s.club).forEach(drawSplat);
     if (!frog.dead) drawToad(frog.x, frog.y, 34, frog.dir, squash);
-    if (inLot && stomps.length) stomps.forEach(dropObject);
     ctx.restore();
 
     if (state === 'shift') {
