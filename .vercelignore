@@ -13,3 +13,7 @@ backend/
 node_modules/
 .git
 *.log
+
+# Source art. It is embedded in the HTML as base64, so the file itself
+# never needs to be served.
+club-floor.png
