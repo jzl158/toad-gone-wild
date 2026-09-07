@@ -47,8 +47,12 @@
     color:#fff;border:2px solid #fff;padding:9px 16px;cursor:pointer}
   button:active{transform:translateY(2px)}
   button:focus-visible,.pad button:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
-  .pad{margin:12px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:300px}
-  .pad button{background:#1B1218;border:2px solid #4A3B44;color:var(--bone);font-size:20px;padding:14px 0}
+  .pad{margin:12px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:300px;
+    touch-action:none}
+  /* touch-action:none on the buttons stops both double-tap zoom and the
+     pinch that two thumbs on the pad would otherwise trigger. */
+  .pad button{background:#1B1218;border:2px solid #4A3B44;color:var(--bone);font-size:20px;padding:14px 0;
+    touch-action:none}
   .pad button:active{background:var(--red);border-color:#fff}
   .pad .sp{visibility:hidden}
   .keys{margin-top:8px;font-size:13px;color:#7E7570;font-weight:600;letter-spacing:.06em;text-transform:uppercase;text-align:center}
@@ -316,7 +320,16 @@
 
   const KEYMAP = { arrowup:'up', w:'up', arrowdown:'down', s:'down',
                    arrowleft:'left', a:'left', arrowright:'right', d:'right' };
+  // While someone is filling in the capture form the game must keep its hands
+  // off the keyboard. WASD are movement keys AND letters: without this guard
+  // preventDefault swallowed them, so a name could not contain w, a, s or d,
+  // p paused the game mid-word, and Enter hit the overlay button instead of
+  // submitting the form.
+  const typingInto = t =>
+    !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
   addEventListener('keydown', e => {
+    if (typingInto(e.target)) return;
     const k = e.key.toLowerCase();
     if (KEYMAP[k]) { e.preventDefault(); if (!held.has(KEYMAP[k])) hop(KEYMAP[k]); held.add(KEYMAP[k]); }
     if (k === 'shift') held.add('shift');
@@ -324,6 +337,7 @@
     if (k === 'enter' && state !== 'play' && state !== 'shift') ovBtn.click();
   });
   addEventListener('keyup', e => {
+    if (typingInto(e.target)) return;
     const k = e.key.toLowerCase();
     if (KEYMAP[k]) held.delete(KEYMAP[k]);
     if (k === 'shift') held.delete('shift');
@@ -365,6 +379,26 @@
   };
   cv.addEventListener('pointerup', stickOff);
   cv.addEventListener('pointercancel', stickOff);
+
+  // A thumb on each side of the D-pad is a pinch as far as the browser is
+  // concerned, so it zoomed the page instead of letting you play. Block the
+  // gesture on the play surfaces ONLY -- the canvas and the pad. Pinch and
+  // scroll still work everywhere else, which the capture form needs: it lives
+  // inside .screen and people have to be able to zoom in and read it.
+  const padEl = document.querySelector('.pad');
+  const onPlaySurface = t => !!t && (t === cv || (padEl && padEl.contains(t)));
+  for (const el of [cv, padEl]) {
+    if (!el) continue;
+    const block = e => { if (e.touches && e.touches.length > 1) e.preventDefault(); };
+    el.addEventListener('touchstart', block, { passive: false });
+    el.addEventListener('touchmove', block, { passive: false });
+  }
+  // Safari drives pinch through its own gesture events, which ignore touch-action.
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(type, e => {
+      if (onPlaySurface(e.target)) e.preventDefault();
+    }, { passive: false });
+  }
 
   // ================= OVERLAY / HUD =================
   const ov = document.getElementById('ov'), ovTitle = document.getElementById('ovTitle'),
