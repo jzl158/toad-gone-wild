@@ -882,35 +882,69 @@
   // shoulders, small head, and the swimsuit reading as two bright bands.
   // A woman in a bikini seen from above: hair, shoulders, the suit as two bright
   // bands, legs below. The dark outline is what keeps her off the busy photo.
+  // A woman in a bikini seen from above. The silhouette is built as a curved
+  // path rather than one ellipse so it carries a real figure: narrow through
+  // the shoulders, nipped at the waist, wide through the hips and thighs.
+  // Hip width varies slightly per seed so a lane is not a row of clones.
   function drawBikini(x, y, w, dir, seed){
     const skin = SKIN[(seed * 3 + 1) % SKIN.length];
     const suit = SWIM[(seed * 5 + 2) % SWIM.length];
     const bob = Math.sin(performance.now() / 300 + seed * 1.7) * 1.6;
+    // Measured, not guessed: the arms used to be the widest part of the figure
+    // at 22px across the bust while the hips were only 18, which read as the
+    // opposite of the brief. Arms are now tucked inside the bust line so the
+    // widest point of the whole sprite is the hips.
+    const hip = 13.0 + ((seed * 7) % 5 - 2) * 0.45;        // 12.1 .. 13.9
+    const sh  = 5.2, bust = 7.0, waist = 4.6;
     ctx.save(); ctx.translate(x + w / 2, y + CELL / 2); if (dir < 0) ctx.scale(-1, 1);
+
     ctx.fillStyle = 'rgba(8,2,14,.55)';
-    ctx.beginPath(); ctx.ellipse(2, 11, 11, 4, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(2, 15, 10, 3.6, 0, 0, 7); ctx.fill();
     ctx.translate(0, bob);
-    ctx.fillStyle = 'rgba(24,14,20,.95)';                    // hair, behind
-    ctx.beginPath(); ctx.ellipse(0, -5, 9, 9.5, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = skin;                                    // legs
-    ctx.beginPath(); ctx.ellipse(-3.6, 8, 2.9, 6, 0, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(3.6, 8, 2.9, 6, 0, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(0, 0, 8.5, 10, 0, 0, 7); ctx.fill();     // torso
-    ctx.strokeStyle = 'rgba(14,6,18,.8)'; ctx.lineWidth = 1.1;
-    ctx.beginPath(); ctx.ellipse(0, 0, 8.5, 10, 0, 0, 7); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.14)';
-    ctx.beginPath(); ctx.ellipse(-3, -3, 4, 4.5, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = suit;                                    // the bikini
-    rr(-8, -4.6, 16, 3.8, 1.8); ctx.fill();
-    rr(-6.4, 3.6, 12.8, 3.6, 1.7); ctx.fill();
-    ctx.fillStyle = skin;                                    // arms
-    ctx.beginPath(); ctx.ellipse(-9.6, 1.5, 2.4, 5.4, 0.22, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(9.6, 1.5, 2.4, 5.4, -0.22, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, -8.5, 5, 0, 7); ctx.fill();               // head
-    ctx.strokeStyle = 'rgba(14,6,18,.6)'; ctx.lineWidth = 0.9;
-    ctx.beginPath(); ctx.arc(0, -8.5, 5, 0, 7); ctx.stroke();
-    ctx.fillStyle = 'rgba(24,14,20,.95)';                    // fringe
-    ctx.beginPath(); ctx.arc(0, -10.2, 4.4, 0, 7); ctx.fill();
+
+    ctx.fillStyle = 'rgba(24,14,20,.95)';                  // hair, behind
+    ctx.beginPath(); ctx.ellipse(0, -8.4, 6.7, 8.2, 0, 0, 7); ctx.fill();
+
+    ctx.fillStyle = skin;                                  // lower legs
+    ctx.beginPath(); ctx.ellipse(-4, 12.4, 2.9, 4.6, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4, 12.4, 2.9, 4.6, 0, 0, 7); ctx.fill();
+
+    // the figure: shoulders -> bust -> waist -> hips -> thigh
+    ctx.beginPath();
+    ctx.moveTo(0, -9.4);
+    ctx.quadraticCurveTo(sh, -9.2, sh, -8);
+    ctx.quadraticCurveTo(bust + 0.2, -6, bust, -4);
+    ctx.quadraticCurveTo(bust - 1, -1, waist, 0.6);
+    ctx.quadraticCurveTo(hip - 1.2, 2.1, hip, 5);
+    ctx.quadraticCurveTo(hip + 0.2, 8, hip - 1.8, 9.8);
+    ctx.lineTo(-(hip - 1.8), 9.8);
+    ctx.quadraticCurveTo(-(hip + 0.2), 8, -hip, 5);
+    ctx.quadraticCurveTo(-(hip - 1.2), 2.1, -waist, 0.6);
+    ctx.quadraticCurveTo(-(bust - 1), -1, -bust, -4);
+    ctx.quadraticCurveTo(-(bust + 0.2), -6, -sh, -8);
+    ctx.quadraticCurveTo(-sh, -9.2, 0, -9.4);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(14,6,18,.8)'; ctx.lineWidth = 1.1; ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,.13)';               // light down one side
+    ctx.beginPath(); ctx.ellipse(-3, -3.5, 3.4, 4.2, 0, 0, 7); ctx.fill();
+
+    ctx.fillStyle = suit;                                  // bikini top
+    rr(-bust - 0.3, -5.8, (bust + 0.3) * 2, 3.7, 1.8); ctx.fill();
+    ctx.beginPath();                                       // high-cut bottoms
+    ctx.moveTo(-hip + 0.6, 3.2); ctx.lineTo(hip - 0.6, 3.2);
+    ctx.quadraticCurveTo(hip - 3.4, 8.6, 0, 9.4);
+    ctx.quadraticCurveTo(-(hip - 3.4), 8.6, -hip + 0.6, 3.2);
+    ctx.closePath(); ctx.fill();
+
+    ctx.fillStyle = skin;                                  // arms, held in at the waist
+    ctx.beginPath(); ctx.ellipse(-bust + 1.2, -2, 1.8, 4.6, 0.16, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bust - 1.2, -2, 1.8, 4.6, -0.16, 0, 7); ctx.fill();
+
+    ctx.beginPath(); ctx.arc(0, -11.4, 4.6, 0, 7); ctx.fill();          // head
+    ctx.strokeStyle = 'rgba(14,6,18,.6)'; ctx.lineWidth = 0.9; ctx.stroke();
+    ctx.fillStyle = 'rgba(24,14,20,.95)';                  // fringe
+    ctx.beginPath(); ctx.arc(0, -13, 4.1, 0, 7); ctx.fill();
     ctx.restore();
   }
 
