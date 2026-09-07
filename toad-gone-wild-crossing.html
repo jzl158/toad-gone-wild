@@ -234,7 +234,7 @@
 
   // ================= GRID LEVELS =================
   const L4VOID = Array.from({ length:11 }, () => ({ type:'clubvoid' }));
-  // Board 3: the lot outside Strokers, on the same lane grammar as boards 1
+  // Board 3: the lot outside KroakersXXX, on the same lane grammar as boards 1
   // and 2 -- two curbs to regroup on, the club door at the top. Nothing here
   // is traffic any more: it is the door team, the queue, and the feet.
   //
@@ -243,7 +243,7 @@
   // the w values here match what the sprites actually draw. Tightest window is
   // 0.90s against board 2's 1.09s -- a step harder, as before.
   const L3 = [
-    { type:'strokers' },
+    { type:'kroakers' },
     { type:'curb' },
     { type:'road', kind:'guard',   dir: 1, speed: 68, w:0.9, gap:2.0, off:0   },
     { type:'road', kind:'sneaker', dir:-1, speed: 92, w:1.6, gap:2.6, off:70  },
@@ -291,7 +291,7 @@
       tag:'Four lanes of traffic. Four lanes of water. <b>One lily pad.</b>' },
     { name:'Underground Plaza', mode:'lanes', top:22, bottom:32, goalCol:6,
       tag:'Bulldogs, badges, and box trucks. <b>One way underground.</b>' },
-    { name:'Strokers Lot',      mode:'lanes', top:11, bottom:21, goalCol:6,
+    { name:'KroakersXXX Lot',   mode:'lanes', top:11, bottom:21, goalCol:6,
       tag:'The door team, the queue, and a whole lot of feet. <b>The door is at the top.</b>' },
     { name:'Respect the Ritual', mode:'club', top:0, bottom:10, goalCol:6,
       tag:'Free roam the floor. Reach the crowned frog by the stairs. <b>They aim where you are going.</b>' }
@@ -821,7 +821,7 @@
       ctx.fillStyle = 'rgba(217,164,65,.16)';
       ctx.fillRect(0, y + CELL - 2, W, 1.5);
     }
-    else if (l.type === 'strokers') drawStorefront(y);
+    else if (l.type === 'kroakers') drawStorefront(y);
     else if (l.type === 'underground') drawUnderground(y);
     else if (l.type === 'goal') {
       const g = ctx.createLinearGradient(0, y, 0, y + CELL);
@@ -978,7 +978,9 @@
     ctx.fillStyle = '#3F5140'; rr(96, y + 17, 200, 15, 2); ctx.fill();
     ctx.fillStyle = '#C9A227'; ctx.fillRect(96, y + 30.5, 200, 1.4);
     ctx.fillStyle = '#F0DCA8'; ctx.font = '800 14px "Barlow Condensed",sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('S T R O K E R S', 196, y + 28);
+    // Centred at 180, not the board's 196: the club door is drawn over this
+    // sign from x=236, and the longer name would otherwise run behind it.
+    ctx.fillText('K R O A K E R S  X X X', 180, y + 28);
     [[42, 44], [306, 40], [426, 46]].forEach(([wx, ww]) => {
       ctx.fillStyle = '#5E6C7E'; rr(wx, y + 22, ww, CELL - 24, 1); ctx.fill();
       ctx.fillStyle = 'rgba(240,226,200,.5)';
@@ -1382,7 +1384,7 @@
       ctx.globalAlpha = Math.sin(shift.t * Math.PI);
       ctx.fillStyle = '#F2EDE4'; ctx.font = '800 22px "Barlow Condensed",sans-serif'; ctx.textAlign = 'center';
       ctx.fillText(to === 1 ? 'NOW ENTERING: UNDERGROUND PLAZA'
-                 : to === 2 ? 'NOW ENTERING: THE LOT AT STROKERS'
+                 : to === 2 ? 'NOW ENTERING: THE LOT AT KROAKERSXXX'
                             : 'INSIDE. RESPECT THE RITUAL.', W / 2, H / 2);
       ctx.globalAlpha = 1;
     }
