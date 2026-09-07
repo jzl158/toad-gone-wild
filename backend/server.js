@@ -29,7 +29,7 @@ const path = require('node:path');
 // two runtimes cannot drift apart.
 const {
   config, missingConfig, keyKind, validate, captureLead, fetchLeaderboard,
-  createLimiter, clientIp, hashIp, corsHeaders
+  createLimiter, clientIp, hashIp, corsHeaders, diagnose
 } = require('../lib/capture.js');
 
 const PORT       = Number(process.env.PORT || 8787);
@@ -146,6 +146,13 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true });
+
+  // Same report as the Vercel function, so a problem can be compared between
+  // the two runtimes rather than guessed at.
+  if (req.method === 'GET' && url.pathname === '/api/health') {
+    const report = await diagnose(cfg);
+    return json(res, report.supabase && report.supabase.ok ? 200 : 503, report);
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/leaderboard') {
     try {
