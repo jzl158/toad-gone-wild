@@ -53,6 +53,15 @@
      pinch that two thumbs on the pad would otherwise trigger. */
   .pad button{background:#1B1218;border:2px solid #4A3B44;color:var(--bone);font-size:20px;padding:14px 0;
     touch-action:none}
+  /* Every arrow is the same glyph, U+25B2, turned to face the right way. The
+     sideways pair used to be U+25C0 and U+25B6, which carry emoji presentations
+     and rendered on phones as coloured play/reverse buttons while the vertical
+     pair stayed plain text. Rotating an inner element, not the button, leaves
+     the :active press animation alone. */
+  .pad button i{display:inline-block;font-style:normal;line-height:1}
+  .pad button[data-dir="right"] i{transform:rotate(90deg)}
+  .pad button[data-dir="down"]  i{transform:rotate(180deg)}
+  .pad button[data-dir="left"]  i{transform:rotate(-90deg)}
   .pad button:active{background:var(--red);border-color:#fff}
   .pad .sp{visibility:hidden}
   .keys{margin-top:8px;font-size:13px;color:#7E7570;font-weight:600;letter-spacing:.06em;text-transform:uppercase;text-align:center}
@@ -135,10 +144,10 @@
     </div>
   </div>
   <div class="pad" role="group" aria-label="Movement controls">
-    <span class="sp"></span><button data-dir="up" aria-label="Move up">&#9650;</button><span class="sp"></span>
-    <button data-dir="left" aria-label="Move left">&#9664;</button>
-    <button data-dir="down" aria-label="Move down">&#9660;</button>
-    <button data-dir="right" aria-label="Move right">&#9654;</button>
+    <span class="sp"></span><button data-dir="up" aria-label="Move up"><i>&#9650;</i></button><span class="sp"></span>
+    <button data-dir="left" aria-label="Move left"><i>&#9650;</i></button>
+    <button data-dir="down" aria-label="Move down"><i>&#9650;</i></button>
+    <button data-dir="right" aria-label="Move right"><i>&#9650;</i></button>
   </div>
   <div class="keys" id="keyhint">Arrow keys / WASD / swipe &middot; P to pause</div>
   <div class="fineprint"><span class="rating">18+</span>Parody. No toads were harmed. Do not attempt this crossing at home. Seriously, they are toads.</div>
